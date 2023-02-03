@@ -24,6 +24,7 @@ class CarController:
     self.apply_steer_last = 0
     self.apply_gas = 0
     self.apply_brake = 0
+    self.apply_speed = 0
     self.frame = 0
     self.last_steer_frame = 0
     self.last_button_frame = 0
@@ -92,6 +93,38 @@ class CarController:
           # ASCM sends max regen when not enabled
           self.apply_gas = self.params.INACTIVE_REGEN
           self.apply_brake = 0
+        elif CC.longActive and self.CP.carFingerprint in CC_ONLY_CAR:
+          # BEGIN CC-ACC ######
+          # TODO: Cleanup the timing - normal is every 30ms...
+
+          # TODO: Handle other units...
+          # 1 mph = 0.44704 m/s
+          # 1 m/s = 2.23694 mph
+          # speedDiffMS = actuators.speed - CS.out.cruiseState.speed
+
+          # TODO: Apparently there are rounding issues.
+          speedSetPoint = int(round(CS.out.cruiseState.speed * CV.MS_TO_MPH))
+          speedActuator = math.floor(actuators.speed * CV.MS_TO_MPH)
+          speedDiff = (speedActuator - speedSetPoint)
+
+          cruiseBtn = CruiseButtons.INIT
+
+          # We will spam the up/down buttons till we reach the desired speed
+          if speedDiff > 0:
+            cloudlog.error(f"CC Set Speed: {speedSetPoint}, Actuator Speed: {speedActuator}, Difference: {speedDiff}: Spamming Resume+")
+            cruiseBtn = CruiseButtons.RES_ACCEL
+          elif speedDiff < 0:
+            cloudlog.error(f"CC Set Speed: {speedSetPoint}, Actuator Speed: {speedActuator}, Difference: {speedDiff}: Spamming Set-")
+            cruiseBtn = CruiseButtons.DECEL_SET
+
+          # Check rlogs closely - our message shouldn't show up on the pt bus for us
+          # Or bus 2, since we're forwarding... but I think it does
+          # TODO: Cleanup the timing - normal is every 30ms...
+          if (cruiseBtn != CruiseButtons.INIT) and ((self.frame - self.last_button_frame) * DT_CTRL > 0.63):
+            self.last_button_frame = self.frame
+            self.apply_speed = speedActuator
+            can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, CS.buttons_counter, cruiseBtn))
+            # END CC-ACC #######
         else:
           self.apply_gas = int(round(interp(actuators.accel, self.params.GAS_LOOKUP_BP, self.params.GAS_LOOKUP_V)))
           self.apply_brake = int(round(interp(actuators.accel, self.params.BRAKE_LOOKUP_BP, self.params.BRAKE_LOOKUP_V)))
@@ -144,7 +177,11 @@ class CarController:
       if (self.frame - self.last_button_frame) * DT_CTRL > 0.04:
         if self.cancel_counter > CAMERA_CANCEL_DELAY_FRAMES:
           self.last_button_frame = self.frame
-          can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.CAMERA, CS.buttons_counter, CruiseButtons.CANCEL))
+          cloudlog.error("Spamming Cancel")
+          if self.CP.carFingerprint in CC_ONLY_CAR:
+            can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, CS.buttons_counter, CruiseButtons.CANCEL))
+          else:
+            can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.CAMERA, CS.buttons_counter, CruiseButtons.CANCEL))
 
     if self.CP.networkLocation == NetworkLocation.fwdCamera and self.CP.carFingerprint not in CC_ONLY_CAR:
       # Silence "Take Steering" alert sent by camera, forward PSCMStatus with HandsOffSWlDetectionStatus=1
@@ -170,6 +207,7 @@ class CarController:
     new_actuators.steerOutputCan = self.apply_steer_last
     new_actuators.gas = self.apply_gas
     new_actuators.brake = self.apply_brake
+    new_actuators.speed = self.apply_speed
 
     self.frame += 1
     return new_actuators, can_sends
