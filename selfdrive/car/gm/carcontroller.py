@@ -1,4 +1,5 @@
 from cereal import car
+from system.swaglog import cloudlog
 from common.conversions import Conversions as CV
 from common.numpy_fast import interp
 from common.realtime import DT_CTRL
