@@ -12,7 +12,7 @@ from selfdrive.modeld.constants import T_IDXS
 V_CRUISE_MIN = 8
 V_CRUISE_MAX = 145
 V_CRUISE_UNSET = 255
-V_CRUISE_INITIAL = 40
+V_CRUISE_INITIAL = 0
 V_CRUISE_INITIAL_EXPERIMENTAL_MODE = 105
 IMPERIAL_INCREMENT = 1.6  # should be CV.MPH_TO_KPH, but this causes rounding errors
 
