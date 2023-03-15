@@ -37,6 +37,22 @@ def actuator_hystereses(final_pedal, pedal_steady):
   return final_pedal, pedal_steady
 
 
+def actuator_hystereses(final_pedal, pedal_steady):
+  # hyst params... TODO: move these to VehicleParams
+  pedal_hyst_gap = 0.01    # don't change pedal command for small oscillations within this value
+
+  # for small pedal oscillations within pedal_hyst_gap, don't change the pedal command
+  if math.isclose(final_pedal, 0.0):
+    pedal_steady = 0.
+  elif final_pedal > pedal_steady + pedal_hyst_gap:
+    pedal_steady = final_pedal - pedal_hyst_gap
+  elif final_pedal < pedal_steady - pedal_hyst_gap:
+    pedal_steady = final_pedal + pedal_hyst_gap
+  final_pedal = pedal_steady
+
+  return final_pedal, pedal_steady
+
+
 class CarController:
   def __init__(self, dbc_name, CP, VM):
     self.CP = CP
